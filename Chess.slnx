@@ -1,0 +1,6 @@
+<Solution>
+	<Project Path="Chess.Domain/Chess.Domain.csproj" />
+	<Project Path="Chess.Application/Chess.Application.csproj" />
+	<Project Path="Chess.Infrastructure/Chess.Infrastructure.csproj" />
+	<Project Path="Chess.Web/Chess.Web.csproj" />
+</Solution>

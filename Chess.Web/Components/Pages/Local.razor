@@ -1,0 +1,127 @@
+@page "/local"
+
+<PageTitle>Local game | Endgame</PageTitle>
+
+<section class="game-page">
+    <div class="game-heading">
+        <div>
+            <p class="eyebrow"><span></span> LOCAL TABLE</p>
+            <h1>Same board. <em>Same room.</em></h1>
+        </div>
+        <div class="game-heading-actions">
+            <span class="game-mode-tag"><span class="live-dot"></span> TWO PLAYERS</span>
+            <button class="quiet-button" type="button" @onclick="NewGame">↻ <span>New game</span></button>
+        </div>
+    </div>
+
+    <div class="play-layout">
+        <section class="board-column" aria-label="Local chess match">
+            <div class="player-strip player-top">
+                <span class="player-token black-token">♚</span>
+                <div class="player-name"><strong>Black</strong><small>Player two</small></div>
+                <span class="turn-indicator @(_game.SideToMove == PieceColor.Black ? "turn-active" : "")">@(_game.SideToMove == PieceColor.Black ? "TO MOVE" : "WAITING")</span>
+                <div class="captured-strip">@foreach (var piece in CapturedBy(PieceColor.Black)) { <span title="Captured @piece">@Symbol(piece.Type, piece.Color)</span> }</div>
+            </div>
+            <ChessBoard Game="_game" Flipped="_flipped" OnMove="MoveMade" OnFlip="FlipBoard" />
+            <div class="player-strip player-bottom">
+                <span class="player-token white-token">♔</span>
+                <div class="player-name"><strong>White</strong><small>Player one</small></div>
+                <span class="turn-indicator @(_game.SideToMove == PieceColor.White ? "turn-active" : "")">@(_game.SideToMove == PieceColor.White ? "TO MOVE" : "WAITING")</span>
+                <div class="captured-strip">@foreach (var piece in CapturedBy(PieceColor.White)) { <span title="Captured @piece">@Symbol(piece.Type, piece.Color)</span> }</div>
+            </div>
+        </section>
+
+        <aside class="game-rail">
+            <section class="rail-section status-section">
+                <div class="section-label">MATCH STATUS <span>01</span></div>
+                <div class="status-line"><span class="status-led @(_game.Status is GameStatus.InProgress or GameStatus.Check ? "led-live" : "led-ended")"></span><strong>@StatusText</strong></div>
+                @if (_drawOfferedBy is { } offeredBy)
+                {
+                    @if (offeredBy != _game.SideToMove && IsActive)
+                    {
+                        <div class="draw-request"><p>@offeredBy offers a draw.</p><div><button class="button-dark" @onclick="AcceptDraw">Accept</button><button class="button-plain" @onclick="DeclineDraw">Decline</button></div></div>
+                    }
+                    else if (IsActive)
+                    {
+                        <p class="inline-note">Draw offer sent to @Opponent(offeredBy).</p>
+                    }
+                }
+                @if (IsActive)
+                {
+                    <div class="match-actions">
+                        <button class="button-plain" type="button" @onclick="OfferDraw" disabled="@(_drawOfferedBy is not null)">Offer draw</button>
+                        <button class="button-plain danger-action" type="button" @onclick="Resign">Resign</button>
+                    </div>
+                    @if (_game.IsThreefoldRepetition) { <button class="claim-button" @onclick="ClaimRepetition">Claim threefold repetition</button> }
+                    @if (_game.IsFiftyMoveClaimAvailable) { <button class="claim-button" @onclick="ClaimFiftyMove">Claim fifty-move draw</button> }
+                }
+            </section>
+
+            <section class="rail-section captured-section">
+                <div class="section-label">CAPTURED PIECES <span>@_game.History.Count</span></div>
+                <div class="captured-row"><span>White</span><div>@foreach (var piece in CapturedBy(PieceColor.White)) { <span title="@piece.Type">@Symbol(piece.Type, piece.Color)</span> }</div></div>
+                <div class="captured-row"><span>Black</span><div>@foreach (var piece in CapturedBy(PieceColor.Black)) { <span title="@piece.Type">@Symbol(piece.Type, piece.Color)</span> }</div></div>
+            </section>
+
+            <section class="rail-section history-section">
+                <div class="section-label">MOVE HISTORY <span>@_game.History.Count PLIES</span></div>
+                @if (_game.History.Count == 0)
+                {
+                    <div class="empty-history"><span>⌁</span><p>Your opening move<br />starts the story.</p></div>
+                }
+                else
+                {
+                    <div class="move-list">
+                        @for (var index = 0; index < _game.History.Count; index += 2)
+                        {
+                            var white = _game.History[index];
+                            var black = index + 1 < _game.History.Count ? _game.History[index + 1] : null;
+                            <div class="move-row"><span class="move-number">@((index / 2) + 1)</span><span>@white.Notation</span><span>@black?.Notation</span></div>
+                        }
+                    </div>
+                }
+            </section>
+        </aside>
+    </div>
+</section>
+
+@code {
+    private ChessGame _game = ChessGame.NewGame();
+    private bool _flipped;
+    private PieceColor? _drawOfferedBy;
+    private bool IsActive => _game.Status is GameStatus.InProgress or GameStatus.Check;
+    private string StatusText => _game.Status switch
+    {
+        GameStatus.InProgress => $"{_game.SideToMove} to move",
+        GameStatus.Check => $"{_game.SideToMove} is in check",
+        GameStatus.Checkmate => $"Checkmate. {Opponent(_game.SideToMove)} wins.",
+        GameStatus.Stalemate => "Draw by stalemate",
+        GameStatus.DrawByAgreement => "Draw by agreement",
+        GameStatus.DrawByRepetition => "Draw by repetition",
+        GameStatus.DrawByFiftyMoveRule => "Draw by fifty-move rule",
+        GameStatus.DrawByInsufficientMaterial => "Draw by insufficient material",
+        GameStatus.Resigned => $"{Opponent(_game.SideToMove)} wins by resignation",
+        _ => "Game in progress"
+    };
+
+    private Task MoveMade(string _) { StateHasChanged(); return Task.CompletedTask; }
+    private Task FlipBoard() { _flipped = !_flipped; return Task.CompletedTask; }
+    private void NewGame() { _game = ChessGame.NewGame(); _drawOfferedBy = null; _flipped = false; }
+    private IEnumerable<Piece> CapturedBy(PieceColor color) => _game.History
+        .Where(record => record.MovingPiece.Color == color && record.CapturedPiece is not null)
+        .Select(record => record.CapturedPiece!.Value);
+    private void OfferDraw() => _drawOfferedBy = _game.SideToMove;
+    private void AcceptDraw() { _game.AgreeDraw(); _drawOfferedBy = null; }
+    private void DeclineDraw() => _drawOfferedBy = null;
+    private void Resign() => _game.Resign();
+    private void ClaimRepetition() => _game.ClaimThreefoldRepetition();
+    private void ClaimFiftyMove() => _game.ClaimFiftyMoveRule();
+    private static PieceColor Opponent(PieceColor color) => color == PieceColor.White ? PieceColor.Black : PieceColor.White;
+    private static string Symbol(PieceType type, PieceColor color) => (color, type) switch
+    {
+        (PieceColor.White, PieceType.King) => "♔", (PieceColor.White, PieceType.Queen) => "♕", (PieceColor.White, PieceType.Rook) => "♖",
+        (PieceColor.White, PieceType.Bishop) => "♗", (PieceColor.White, PieceType.Knight) => "♘", (PieceColor.White, PieceType.Pawn) => "♙",
+        (PieceColor.Black, PieceType.King) => "♚", (PieceColor.Black, PieceType.Queen) => "♛", (PieceColor.Black, PieceType.Rook) => "♜",
+        (PieceColor.Black, PieceType.Bishop) => "♝", (PieceColor.Black, PieceType.Knight) => "♞", _ => "♟"
+    };
+}

@@ -1,0 +1,29 @@
+Role
+
+You are a senior software architect responsible for maintaining architectural integrity in a production codebase. Every line of code must align with the established system design. Architecture documents are binding contracts.
+
+Task
+
+Build me a full chess app in.Net 10 C# with a nice Blazor web interface and a backend that handles the actual game logic.
+
+I want it to let two people play locally on the same screen, and also play online with a game link or game ID so two players on different machines can join the same match and see moves update in real time. The board should be interactive, let me click a piece to see legal moves, support dragging pieces, show captured pieces and move history, and flip the board for the black player.
+
+Make sure the chess rules are all handled correctly, including castling, en passant, pawn promotion, check, checkmate, stalemate, threefold repetition, the 50 move rule, insufficient material, draw offers, and resignation. If possible, keep the code clean and separated so the game rules are not mixed into the UI, and look up current docs online if you need to.
+
+Specification:
+
+Local Game Mode
+Navigate to /local to play offline with a friend on the same machine. Two players take turns on the same screen.
+
+Online Game Mode
+Navigate to /online to play over the network:
+
+One player creates a new game and gets a Game ID
+The opponent connects to the same backend URL and joins using the Game ID
+Both players see the board in real-time via SignalR
+
+Development concerns:
+
+Backend: .NET 10, ASP.NET Core, MediatR (CQRS), SignalR
+Frontend: .NET 10, Blazor Server, Bootstrap 5
+Architecture: Clean Architecture, Domain-Driven Design

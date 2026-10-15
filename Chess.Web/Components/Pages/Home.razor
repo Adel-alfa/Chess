@@ -1,0 +1,42 @@
+﻿@page "/"
+
+<PageTitle>Endgame | Chess</PageTitle>
+
+<section class="home-screen">
+	<div class="home-copy">
+		<p class="eyebrow"><span></span> THE BOARD IS YOURS</p>
+		<h1>Make your<br /><em>next move.</em></h1>
+		<p class="home-intro">A focused chessboard for close games and far-away opponents.</p>
+		<div class="mode-actions">
+			<a class="mode-link mode-local" href="/local"><span class="mode-icon">♟</span><span><strong>Play locally</strong><small>Two players, one board</small></span><span class="mode-arrow">→</span></a>
+			<a class="mode-link mode-online" href="/online"><span class="mode-icon">↗</span><span><strong>Play online</strong><small>Create a match or join by ID</small></span><span class="mode-arrow">→</span></a>
+		</div>
+		<div class="home-footnote"><span class="live-dot"></span> STANDARD CHESS · LIVE MATCHES</div>
+	</div>
+	<div class="home-board" aria-hidden="true">
+		<div class="board-shadow"></div>
+		<div class="board-art">
+			@foreach (var piece in HomePieces)
+			{
+				<span class="art-piece @piece.Class" style="grid-column:@(piece.File + 1);grid-row:@(8 - piece.Rank)">@piece.Symbol</span>
+			}
+			<span class="art-coordinate art-file">A&nbsp;&nbsp;B&nbsp;&nbsp;C&nbsp;&nbsp;D&nbsp;&nbsp;E&nbsp;&nbsp;F&nbsp;&nbsp;G&nbsp;&nbsp;H</span>
+			<span class="art-coordinate art-rank">8<br />7<br />6<br />5<br />4<br />3<br />2<br />1</span>
+		</div>
+		<div class="board-caption"><span>01 / OPENING POSITION</span><span>EST. YOUR OWN TEMPO</span></div>
+	</div>
+</section>
+
+@code {
+	private static readonly (int File, int Rank, string Symbol, string Class)[] HomePieces =
+	[
+		(0, 0, "♖", "light-piece"), (1, 0, "♘", "light-piece"), (2, 0, "♗", "light-piece"), (3, 0, "♕", "light-piece"),
+		(4, 0, "♔", "light-piece"), (5, 0, "♗", "light-piece"), (6, 0, "♘", "light-piece"), (7, 0, "♖", "light-piece"),
+		(0, 1, "♙", "light-piece"), (1, 1, "♙", "light-piece"), (2, 1, "♙", "light-piece"), (3, 1, "♙", "light-piece"),
+		(4, 1, "♙", "light-piece"), (5, 1, "♙", "light-piece"), (6, 1, "♙", "light-piece"), (7, 1, "♙", "light-piece"),
+		(0, 6, "♟", "dark-piece"), (1, 6, "♟", "dark-piece"), (2, 6, "♟", "dark-piece"), (3, 6, "♟", "dark-piece"),
+		(4, 6, "♟", "dark-piece"), (5, 6, "♟", "dark-piece"), (6, 6, "♟", "dark-piece"), (7, 6, "♟", "dark-piece"),
+		(0, 7, "♜", "dark-piece"), (1, 7, "♞", "dark-piece"), (2, 7, "♝", "dark-piece"), (3, 7, "♛", "dark-piece"),
+		(4, 7, "♚", "dark-piece"), (5, 7, "♝", "dark-piece"), (6, 7, "♞", "dark-piece"), (7, 7, "♜", "dark-piece")
+	];
+}

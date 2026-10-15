@@ -1,0 +1,170 @@
+@using Chess.Domain
+
+<div class="board-frame">
+    <div class="chess-board" role="grid" aria-label="Chess board">
+        @foreach (var square in Squares())
+        {
+            var piece = PieceAt(square);
+            var isSelected = _selected == square;
+            var isLegal = LegalTargets.Contains(square.ToString());
+            var isLastMove = LastMoveContains(square);
+            <button @key="square" type="button"
+                    class="chess-square @((square.File + square.Rank) % 2 == 0 ? "square-light" : "square-dark") @(isSelected ? "selected" : "") @(isLegal ? "legal-target" : "") @(isLastMove ? "last-move" : "")"
+                    aria-label="@SquareLabel(square, piece)" role="gridcell"
+                    draggable="@(piece is not null)"
+                    @onclick="() => SelectSquare(square)"
+                    @ondragstart="() => StartDrag(square)"
+                    @ondragover:preventDefault
+                    @ondrop="() => DropOn(square)">
+                @if (square.File == (Flipped ? 7 : 0))
+                {
+                    <span class="rank-coordinate">@(square.Rank + 1)</span>
+                }
+                @if (square.Rank == (Flipped ? 0 : 7))
+                {
+                    <span class="file-coordinate">@((char)('a' + square.File))</span>
+                }
+                @if (piece is { } value)
+                {
+                    <span class="chess-piece @(value.Color == PieceColor.White ? "piece-white" : "piece-black")" aria-hidden="true">@Symbol(value.Type, value.Color)</span>
+                }
+                else if (isLegal)
+                {
+                    <span class="move-dot" aria-hidden="true"></span>
+                }
+            </button>
+        }
+    </div>
+</div>
+<div class="board-controls">
+    <span class="board-hint">Select a piece or drag it to a highlighted square</span>
+    <button class="icon-button" type="button" title="Flip board" aria-label="Flip board" @onclick="FlipBoard">⇅</button>
+</div>
+@if (_promotionMoves.Count > 0)
+{
+    <div class="promotion-picker" role="group" aria-label="Choose promotion piece">
+        <span>Promote to</span>
+        @foreach (var move in _promotionMoves)
+        {
+            <button class="promotion-choice" type="button" title="Promote to @move.Promotion" @onclick="() => CompletePromotion(move)">@Symbol(move.Promotion!.Value, CurrentColor)</button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public ChessGame? Game { get; set; }
+    [Parameter] public GameSnapshot? Snapshot { get; set; }
+    [Parameter] public bool Flipped { get; set; }
+    [Parameter] public EventCallback<string> OnMove { get; set; }
+    [Parameter] public EventCallback OnFlip { get; set; }
+
+    private Square? _selected;
+    private List<ChessMove> _promotionMoves = [];
+
+    private PieceColor CurrentColor => Enum.TryParse<PieceColor>(Snapshot?.SideToMove, out var color) ? color : Game?.SideToMove ?? PieceColor.White;
+    private IEnumerable<string> LegalTargets => MovesFromSelection().Select(move => move.To.ToString()).Distinct();
+    private IReadOnlyList<ChessMove> LegalMoves => Game?.LegalMoves() ?? [];
+
+    private IEnumerable<Square> Squares()
+    {
+        for (var row = 0; row < 8; row++)
+        for (var column = 0; column < 8; column++)
+            yield return new Square(Flipped ? 7 - column : column, Flipped ? row : 7 - row);
+    }
+
+    private Piece? PieceAt(Square square)
+    {
+        if (Game is not null) return Game.GetPiece(square);
+        var view = Snapshot?.Pieces.FirstOrDefault(piece => piece.Square == square.ToString());
+        return view is null || !Enum.TryParse<PieceColor>(view.Color, out var color) || !Enum.TryParse<PieceType>(view.Type, out var type)
+            ? null
+            : new Piece(color, type);
+    }
+
+    private IEnumerable<ChessMove> MovesFromSelection()
+    {
+        if (_selected is not { } selected) return [];
+        return Game is not null
+            ? Game.LegalMoves(selected)
+            : Snapshot?.LegalMoves.Where(move => move.StartsWith(selected.ToString(), StringComparison.Ordinal))
+                .Select(ParseMove).Where(move => move.HasValue).Select(move => move!.Value).ToArray() ?? [];
+    }
+
+    private bool LastMoveContains(Square square)
+    {
+        if (Game?.History.LastOrDefault() is { } local) return local.Move.From == square || local.Move.To == square;
+        var last = Snapshot?.History.LastOrDefault();
+        return last is not null && (last.Black is { } black && MoveTouches(black, square) || MoveTouches(last.White, square));
+    }
+
+    private async Task SelectSquare(Square square)
+    {
+        if (_selected is { } selected)
+        {
+            var matches = MovesFromSelection().Where(move => move.To == square).ToList();
+            if (matches.Count > 1) { _promotionMoves = matches; return; }
+            if (matches.Count == 1) { await Submit(matches[0]); return; }
+        }
+        var piece = PieceAt(square);
+        if (piece is { } value && value.Color == CurrentColor && IsGameActive())
+        {
+            _selected = square;
+            _promotionMoves.Clear();
+        }
+        else
+        {
+            _selected = null;
+            _promotionMoves.Clear();
+        }
+    }
+
+    private void StartDrag(Square square)
+    {
+        var piece = PieceAt(square);
+        _selected = piece is { } value && value.Color == CurrentColor ? square : null;
+        _promotionMoves.Clear();
+    }
+
+    private async Task DropOn(Square square) => await SelectSquare(square);
+
+    private async Task CompletePromotion(ChessMove move)
+    {
+        _promotionMoves.Clear();
+        await Submit(move);
+    }
+
+    private async Task Submit(ChessMove move)
+    {
+        _selected = null;
+        _promotionMoves.Clear();
+        if (Game is not null) Game.MakeMove(move);
+        await OnMove.InvokeAsync(move.ToString());
+    }
+
+    private async Task FlipBoard() => await OnFlip.InvokeAsync();
+
+    private bool IsGameActive()
+    {
+        var status = Game?.Status;
+        if (status is null && Enum.TryParse<GameStatus>(Snapshot?.Status, out var snapshotStatus)) status = snapshotStatus;
+        return status is GameStatus.InProgress or GameStatus.Check;
+    }
+
+    private static ChessMove? ParseMove(string value)
+    {
+        if (value.Length is not (4 or 5)) return null;
+        var promotion = value.Length == 5 ? value[4] switch { 'q' => PieceType.Queen, 'r' => PieceType.Rook, 'b' => PieceType.Bishop, 'n' => PieceType.Knight, _ => (PieceType?)null } : null;
+        return new ChessMove(Square.Parse(value[..2]), Square.Parse(value[2..4]), promotion);
+    }
+
+    private static bool MoveTouches(string move, Square square) => move.Length >= 4 && (move[..2] == square.ToString() || move.Substring(2, 2) == square.ToString());
+    private static string SquareLabel(Square square, Piece? piece) => piece is { } value ? $"{value.Color} {value.Type} on {square}" : $"Empty {square}";
+
+    private static string Symbol(PieceType type, PieceColor color) => (color, type) switch
+    {
+        (PieceColor.White, PieceType.King) => "♔", (PieceColor.White, PieceType.Queen) => "♕", (PieceColor.White, PieceType.Rook) => "♖",
+        (PieceColor.White, PieceType.Bishop) => "♗", (PieceColor.White, PieceType.Knight) => "♘", (PieceColor.White, PieceType.Pawn) => "♙",
+        (PieceColor.Black, PieceType.King) => "♚", (PieceColor.Black, PieceType.Queen) => "♛", (PieceColor.Black, PieceType.Rook) => "♜",
+        (PieceColor.Black, PieceType.Bishop) => "♝", (PieceColor.Black, PieceType.Knight) => "♞", _ => "♟"
+    };
+}

@@ -1,0 +1,30 @@
+﻿@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <header class="site-header">
+        <a class="brand" href="/" aria-label="Endgame home"><span class="brand-mark">♞</span><span>ENDGAME</span></a>
+        <nav class="main-nav" aria-label="Main navigation">
+            <NavLink href="/local" Match="NavLinkMatch.Prefix">Local game</NavLink>
+            <NavLink href="/online" Match="NavLinkMatch.Prefix">Online</NavLink>
+        </nav>
+        <span class="header-note">A quiet place for a good game.</span>
+    </header>
+    <main class="main-content">@Body</main>
+
+    <footer class="site-footer" role="contentinfo">
+        <div class="footer-inner">
+            <div class="footer-left">Adel Hassan</div>
+            <div class="footer-right">
+                <a href="mailto:adel_alfa@hotmail.com">adel_alfa@hotmail.com</a>
+                <span class="sep">·</span>
+                <a href="https://github.com/Adel-alfa" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <span class="sep">·</span>
+                <a href="https://linkedin.com/in/adel-hassan-ly" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+            </div>
+        </div>
+    </footer>
+</div>
+<div id="blazor-error-ui" data-nosnippet>
+    The game encountered an error. <a href="." class="reload">Reload</a>
+    <button class="dismiss" aria-label="Dismiss">×</button>
+</div>

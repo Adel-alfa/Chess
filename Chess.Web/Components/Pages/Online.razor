@@ -1,0 +1,240 @@
+@page "/online"
+@page "/online/{GameId}"
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject OnlineGameClient GameClient
+
+<PageTitle>Online game | Endgame</PageTitle>
+
+<section class="game-page">
+    <div class="game-heading">
+        <div>
+            <p class="eyebrow"><span></span> ONLINE TABLE</p>
+            <h1>Across the <em>board.</em></h1>
+        </div>
+        <div class="game-heading-actions">
+            <span class="connection-tag"><span class="status-led @(_connected ? "led-live" : "led-ended")"></span>@(_connected ? "CONNECTED" : "CONNECTING")</span>
+        </div>
+    </div>
+
+    @if (!_connected)
+    {
+        <div class="online-wait"><span class="loader-mark">♞</span><p>Connecting to the game server…</p></div>
+    }
+    else if (_snapshot is null)
+    {
+        <div class="online-entry">
+            <div class="entry-create">
+                <span class="entry-number">01</span>
+                <h2>Start a new match</h2>
+                <p>Create a room and share its link with your opponent.</p>
+                <button class="button-dark create-button" type="button" @onclick="CreateGame" disabled="@_busy">Create game <span>↗</span></button>
+            </div>
+            <div class="entry-divider"><span>OR</span></div>
+            <div class="entry-join">
+                <span class="entry-number">02</span>
+                <h2>Join a match</h2>
+                <p>Enter the game ID shared by your opponent.</p>
+                <div class="join-form"><input @bind="_joinId" @bind:event="oninput" placeholder="e.g. 8f3a2b1c" aria-label="Game ID" /><button class="button-dark" type="button" @onclick="JoinGame" disabled="@(_busy || string.IsNullOrWhiteSpace(_joinId))">Join <span>→</span></button></div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="online-match-bar">
+            <div class="match-id"><span>GAME ID</span><strong>@_snapshot.GameId</strong></div>
+            <div class="share-link"><span>SHARE THIS LINK</span><a href="@ShareUrl">@ShareUrl</a></div>
+            <button class="quiet-button" type="button" title="Copy game link" @onclick="CopyLink">⧉ <span>Copy link</span></button>
+        </div>
+        <div class="play-layout">
+            <section class="board-column" aria-label="Online chess match">
+                <div class="player-strip player-top">
+                    <span class="player-token black-token">♚</span>
+                    <div class="player-name"><strong>Black</strong><small>@(_snapshot.BlackJoined ? (_snapshot.YourColor == "Black" ? "You" : "Opponent connected") : "Waiting to join")</small></div>
+                    <span class="turn-indicator @(_snapshot.SideToMove == "Black" ? "turn-active" : "")">@(_snapshot.SideToMove == "Black" ? "TO MOVE" : "WAITING")</span>
+                    <div class="captured-strip">@foreach (var piece in _snapshot.CapturedByBlack) { <span title="Captured @piece.Type">@Symbol(piece.Type, piece.Color)</span> }</div>
+                </div>
+                <ChessBoard Snapshot="_snapshot" Flipped="_flipped" OnMove="MoveMade" OnFlip="FlipBoard" />
+                <div class="player-strip player-bottom">
+                    <span class="player-token white-token">♔</span>
+                    <div class="player-name"><strong>White</strong><small>@(_snapshot.YourColor == "White" ? "You" : "Opponent")</small></div>
+                    <span class="turn-indicator @(_snapshot.SideToMove == "White" ? "turn-active" : "")">@(_snapshot.SideToMove == "White" ? "TO MOVE" : "WAITING")</span>
+                    <div class="captured-strip">@foreach (var piece in _snapshot.CapturedByWhite) { <span title="Captured @piece.Type">@Symbol(piece.Type, piece.Color)</span> }</div>
+                </div>
+            </section>
+
+            <aside class="game-rail">
+                <section class="rail-section status-section">
+                    <div class="section-label">MATCH STATUS <span>LIVE</span></div>
+                    <div class="status-line"><span class="status-led @(_snapshot.Status is "InProgress" or "Check" ? "led-live" : "led-ended")"></span><strong>@StatusText</strong></div>
+                    @if (_snapshot.DrawOfferBy is { } offeredBy)
+                    {
+                        @if (offeredBy != _snapshot.YourColor)
+                        {
+                            <div class="draw-request"><p>@offeredBy offers a draw.</p><div><button class="button-dark" @onclick="() => RespondToDraw(true)">Accept</button><button class="button-plain" @onclick="() => RespondToDraw(false)">Decline</button></div></div>
+                        }
+                        else { <p class="inline-note">Draw offer sent.</p> }
+                    }
+                    @if (IsActive)
+                    {
+                        <div class="match-actions">
+                            <button class="button-plain" type="button" @onclick="OfferDraw" disabled="@(_snapshot.DrawOfferBy is not null)">Offer draw</button>
+                            <button class="button-plain danger-action" type="button" @onclick="Resign">Resign</button>
+                        </div>
+                        @if (_snapshot.ThreefoldClaimAvailable) { <button class="claim-button" @onclick="() => ClaimDraw(true)">Claim threefold repetition</button> }
+                        @if (_snapshot.FiftyMoveClaimAvailable) { <button class="claim-button" @onclick="() => ClaimDraw(false)">Claim fifty-move draw</button> }
+                    }
+                </section>
+
+                <section class="rail-section captured-section">
+                    <div class="section-label">CAPTURED PIECES <span>@_snapshot.History.Count</span></div>
+                    <div class="captured-row"><span>White</span><div>@foreach (var piece in _snapshot.CapturedByWhite) { <span title="@piece.Type">@Symbol(piece.Type, piece.Color)</span> }</div></div>
+                    <div class="captured-row"><span>Black</span><div>@foreach (var piece in _snapshot.CapturedByBlack) { <span title="@piece.Type">@Symbol(piece.Type, piece.Color)</span> }</div></div>
+                </section>
+
+                <section class="rail-section history-section">
+                    <div class="section-label">MOVE HISTORY <span>@_snapshot.History.Count MOVES</span></div>
+                    @if (_snapshot.History.Count == 0)
+                    {
+                        <div class="empty-history"><span>⌁</span><p>Waiting for the<br />first move.</p></div>
+                    }
+                    else
+                    {
+                        <div class="move-list">
+                            @foreach (var move in _snapshot.History)
+                            {
+                                <div class="move-row"><span class="move-number">@move.Number</span><span>@move.White</span><span>@move.Black</span></div>
+                            }
+                        </div>
+                    }
+                </section>
+            </aside>
+        </div>
+    }
+    @if (_error is not null) { <div class="error-note" role="alert">@_error</div> }
+</section>
+
+@code {
+    [Parameter] public string? GameId { get; set; }
+
+    private GameSnapshot? _snapshot;
+    private string _joinId = "";
+    private bool _connected;
+    private bool _busy;
+    private bool _flipped;
+    private bool _orientationInitialized;
+    private string? _error;
+    private string ShareUrl => $"{Navigation.BaseUri.TrimEnd('/')}/online/{_snapshot?.GameId}";
+    private bool IsActive => _snapshot?.Status is "InProgress" or "Check";
+    private string StatusText => _snapshot?.Status switch
+    {
+        "Check" => $"{_snapshot.SideToMove} is in check",
+        "Checkmate" => $"Checkmate. {(_snapshot.SideToMove == "White" ? "Black" : "White")} wins.",
+        "Stalemate" => "Draw by stalemate",
+        "DrawByAgreement" => "Draw by agreement",
+        "DrawByRepetition" => "Draw by repetition",
+        "DrawByFiftyMoveRule" => "Draw by fifty-move rule",
+        "DrawByInsufficientMaterial" => "Draw by insufficient material",
+        "Resigned" => $"{Opponent(_snapshot.ResignedBy)} wins by resignation",
+        _ => $"{_snapshot?.SideToMove} to move"
+    };
+
+    protected override void OnInitialized()
+    {
+        GameClient.GameUpdated += HandleGameUpdated;
+        GameClient.ConnectionChanged += HandleConnectionChanged;
+        GameClient.ErrorOccurred += HandleClientError;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            await GameClient.ConnectAsync(GameId);
+            _connected = GameClient.IsConnected;
+            if (GameClient.Snapshot is { } snapshot) ApplySnapshot(snapshot);
+        }
+        catch (Exception exception) { _error = exception.Message; }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CreateGame()
+    {
+        await RunHubAction(GameClient.CreateGameAsync);
+    }
+
+    private async Task JoinGame()
+    {
+        await RunHubAction(() => GameClient.JoinGameAsync(_joinId.Trim()));
+    }
+
+    private async Task MoveMade(string move) => await RunHubAction(() => GameClient.MoveAsync(move));
+    private async Task OfferDraw() => await RunHubAction(GameClient.OfferDrawAsync);
+    private async Task RespondToDraw(bool accept) => await RunHubAction(() => GameClient.RespondToDrawAsync(accept));
+    private async Task ClaimDraw(bool threefold) => await RunHubAction(() => GameClient.ClaimDrawAsync(threefold));
+    private async Task Resign() => await RunHubAction(GameClient.ResignAsync);
+    private Task FlipBoard() { _flipped = !_flipped; return Task.CompletedTask; }
+
+    private void ApplySnapshot(GameSnapshot snapshot)
+    {
+        _snapshot = snapshot;
+        _error = null;
+        if (!_orientationInitialized && snapshot.YourColor is not null)
+        {
+            _flipped = snapshot.YourColor == "Black";
+            _orientationInitialized = true;
+        }
+    }
+
+    private async Task RunHubAction(Func<Task<GameSnapshot>> action)
+    {
+        if (!GameClient.IsConnected) return;
+        _busy = true;
+        _error = null;
+        try { ApplySnapshot(await action()); }
+        catch (Exception exception) { _error = exception.Message; }
+        finally { _busy = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private async Task CopyLink()
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", ShareUrl); }
+        catch (JSException) { _error = "Copying is unavailable in this browser. Select the game link to copy it."; }
+    }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private void HandleGameUpdated(GameSnapshot snapshot) => _ = InvokeAsync(() =>
+    {
+        ApplySnapshot(snapshot);
+        StateHasChanged();
+    });
+
+    private void HandleConnectionChanged(bool connected) => _ = InvokeAsync(() =>
+    {
+        _connected = connected;
+        StateHasChanged();
+    });
+
+    private void HandleClientError(string message) => _ = InvokeAsync(() =>
+    {
+        _error = message;
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        GameClient.GameUpdated -= HandleGameUpdated;
+        GameClient.ConnectionChanged -= HandleConnectionChanged;
+        GameClient.ErrorOccurred -= HandleClientError;
+    }
+
+    private static string Symbol(string type, string color) => (color, type) switch
+    {
+        ("White", "King") => "♔", ("White", "Queen") => "♕", ("White", "Rook") => "♖", ("White", "Bishop") => "♗", ("White", "Knight") => "♘", ("White", "Pawn") => "♙",
+        ("Black", "King") => "♚", ("Black", "Queen") => "♛", ("Black", "Rook") => "♜", ("Black", "Bishop") => "♝", ("Black", "Knight") => "♞", _ => "♟"
+    };
+
+    private static string Opponent(string? color) => color == "White" ? "Black" : "White";
+}
